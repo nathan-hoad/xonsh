@@ -1,7 +1,7 @@
 import os
 import subprocess as sp
 import tempfile
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -188,3 +188,22 @@ def test_current_branch_does_not_call_locate_binary_for_non_empty_cmds_cache(xon
     cache.lazy_locate_binary = Mock(return_value='')
     vc.current_branch()
     assert not cache.locate_binary.called
+
+
+def test_hg_dirty_working_directory_handles_lack_of_permissions(xonsh_builtins):
+    xonsh_builtins.__xonsh_env__ = DummyEnv(VC_BRANCH_TIMEOUT=1, PWD='cool')
+
+    with patch('subprocess.check_output', side_effect=PermissionError):
+        assert vc.hg_dirty_working_directory() is None
+
+
+def test__get_hg_root_handles_lack_of_permissions(xonsh_builtins):
+    import queue
+    temp_dir = tempfile.mkdtemp()
+    xonsh_builtins.__xonsh_env__ = Env(VC_BRANCH_TIMEOUT=2, PWD=temp_dir)
+    q = queue.Queue()
+
+    isdir_mock = patch('os.path.isdir', return_value=True)
+    scandir_mock = patch('xonsh.tools.scandir', side_effect=PermissionError)
+    with isdir_mock, scandir_mock:
+        assert vc._get_hg_root(q) is False
