@@ -11,4 +11,6 @@
 * Fix VC prompt for hg raising a PermissionError if one of the parent
   directories wasn't accessible.
 
+* Fix PermissionError on termux for Android when trying to get the hg root.
+
 **Security:** None

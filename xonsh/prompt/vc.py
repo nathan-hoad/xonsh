@@ -59,7 +59,14 @@ def _get_hg_root(q):
     while True:
         if not os.path.isdir(_curpwd):
             return False
-        if any([b.name == '.hg' for b in xt.scandir(_curpwd)]):
+        # termux on Android returns True for os.path.isdir('/data/data'), but
+        # xt.scandir raises a PermissionError.
+        try:
+            sd = xt.scandir(_curpwd)
+        except PermissionError:
+            return False
+
+        if any([b.name == '.hg' for b in sd]):
             q.put(_curpwd)
             break
         else:
