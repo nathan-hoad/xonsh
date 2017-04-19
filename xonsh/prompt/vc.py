@@ -202,7 +202,7 @@ def hg_dirty_working_directory():
                                     env=denv)
         return s.strip(os.linesep).endswith('+')
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired,
-            FileNotFoundError):
+            FileNotFoundError, PermissionError) as e:
         return None
 
 
