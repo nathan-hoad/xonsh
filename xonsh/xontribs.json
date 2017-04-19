@@ -8,7 +8,7 @@
   "package": "xonsh-autoxsh",
   "url": "https://github.com/Granitas/xonsh-autoxsh",
   "description": ["Adds automatic execution of xonsh script files called",
-              "``.autoxsh`` when enterting a directory with ``cd`` function"]
+              "``.autoxsh`` when entering a directory with ``cd`` function"]
  },
  {"name": "bashisms",
   "package": "xonsh",
@@ -20,14 +20,14 @@
     "additions do not affect the xonsh language when run as script. That said, ",
     "you might find them useful if you have strong muscle memory.\n\n",
     "**Warning:** This xontrib may modify user command line input to implement ",
-    "its behavior. To see the modifications as they are applied (in unified diff",
+    "its behavior. To see the modifications as they are applied (in unified diff ",
     "format), please set ``$XONSH_DEBUG`` to ``2`` or higher."]
  },
  {"name": "coreutils",
   "package": "xonsh",
   "url": "http://xon.sh",
   "description": [
-    "Additional core utilites that are implemened in xonsh. The current list ",
+    "Additional core utilities that are implemented in xonsh. The current list ",
     "includes:\n",
     "\n",
     "* cat\n",
@@ -84,13 +84,13 @@
   "package": "xonsh",
   "url": "http://xon.sh",
   "description": [
-    "Release the lock on the current directory whenever the",
-    "prompt is shown. Enabling this will allow the other programs or",
-    "Windows Explorer to delete or rename the current or parent",
-    "directories. Internally, it is accomplished by temporarily resetting",
-    "CWD to the root drive folder while waiting at the prompt. This only",
-    "works with the prompt_toolkit backend and can cause cause issues",
-    "if any extensions are enabled that hook the prompt and relies on",
+    "Release the lock on the current directory whenever the ",
+    "prompt is shown. Enabling this will allow the other programs or ",
+    "Windows Explorer to delete or rename the current or parent ",
+    "directories. Internally, it is accomplished by temporarily resetting ",
+    "CWD to the root drive folder while waiting at the prompt. This only ",
+    "works with the prompt_toolkit backend and can cause cause issues ",
+    "if any extensions are enabled that hook the prompt and relies on ",
     "``os.getcwd()``"]
  },
  {"name": "scrapy_tabcomplete",
