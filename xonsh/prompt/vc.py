@@ -66,7 +66,7 @@ def _get_hg_root(q):
         except PermissionError:
             return False
 
-        if any([b.name == '.hg' for b in sd]):
+        if any(b.name == '.hg' for b in sd):
             q.put(_curpwd)
             break
         else:
