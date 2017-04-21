@@ -13,4 +13,6 @@
 
 * Fix PermissionError on termux for Android when trying to get the hg root.
 
+* Fix VC prompt for hg not displaying the branch.
+
 **Security:** None

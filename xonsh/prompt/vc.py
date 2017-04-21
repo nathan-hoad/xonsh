@@ -62,6 +62,7 @@ def _get_hg_root(q):
             return False
 
         if (p / '.hg').exists():
+            q.put(str(p))
             return True
     return False
 

@@ -162,12 +162,11 @@ def test_no_repo(xonsh_builtins):
 
 
 def test_vc_get_branch(test_repo, xonsh_builtins):
-    xonsh_builtins.__xonsh_env__ = Env(VC_BRANCH_TIMEOUT=2)
+    xonsh_builtins.__xonsh_env__ = Env(VC_BRANCH_TIMEOUT=2, PWD=test_repo['dir'])
     # get corresponding function from vc module
     fun = 'get_{}_branch'.format(test_repo['name'])
     obs = getattr(vc, fun)()
-    if obs is not None:
-        assert obs == VC_BRANCH[test_repo['name']]
+    assert obs == VC_BRANCH[test_repo['name']]
 
 
 def test_current_branch_calls_locate_binary_for_empty_cmds_cache(xonsh_builtins):
