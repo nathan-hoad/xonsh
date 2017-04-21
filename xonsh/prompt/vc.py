@@ -3,6 +3,7 @@
 # pylint:disable=no-member, invalid-name
 
 import os
+import pathlib
 import sys
 import queue
 import builtins
@@ -55,25 +56,14 @@ def get_git_branch():
 
 
 def _get_hg_root(q):
-    _curpwd = builtins.__xonsh_env__['PWD']
-    while True:
-        if not os.path.isdir(_curpwd):
-            return False
-        # termux on Android returns True for os.path.isdir('/data/data'), but
-        # xt.scandir raises a PermissionError.
-        try:
-            sd = xt.scandir(_curpwd)
-        except PermissionError:
+    _curpwd = pathlib.Path(builtins.__xonsh_env__['PWD'])
+    for p in [_curpwd] + list(_curpwd.parents):
+        if not p.is_dir():
             return False
 
-        if any(b.name == '.hg' for b in sd):
-            q.put(_curpwd)
-            break
-        else:
-            _oldpwd = _curpwd
-            _curpwd = os.path.split(_curpwd)[0]
-            if _oldpwd == _curpwd:
-                return False
+        if (p / '.hg').exists():
+            return True
+    return False
 
 
 def get_hg_branch(root=None):
