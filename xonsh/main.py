@@ -218,31 +218,50 @@ class XonshMode(enum.Enum):
     interactive = 3
 
 
-def start_services(shell_kwargs):
-    """Starts up the essential services in the proper order.
-    This returns the environment instance as a convenience.
-    """
+def _start_services(shell_kwargs):
     install_import_hooks()
     # create execer, which loads builtins
     ctx = shell_kwargs.get('ctx', {})
     debug = to_bool_or_int(os.getenv('XONSH_DEBUG', '0'))
     events.on_timingprobe.fire(name='pre_execer_init')
+    import time
+    s = time.time()
     execer = Execer(xonsh_ctx=ctx, debug_level=debug,
                     scriptcache=shell_kwargs.get('scriptcache', True),
                     cacheall=shell_kwargs.get('cacheall', False))
+    print('execer took', time.time() - s)
     events.on_timingprobe.fire(name='post_execer_init')
     # load rc files
     login = shell_kwargs.get('login', True)
     env = builtins.__xonsh_env__
     rc = shell_kwargs.get('rc', None)
+    # create shell
+    s = time.time()
+    builtins.__xonsh_shell__ = Shell(execer=execer, **shell_kwargs)
+    print('shell took', time.time() - s)
+    yield
+
     rc = env.get('XONSHRC') if rc is None else rc
     events.on_pre_rc.fire()
+    s = time.time()
     xonshrc_context(rcfiles=rc, execer=execer, ctx=ctx, env=env, login=login)
+    print('xonshrc_context', time.time() - s)
     events.on_post_rc.fire()
-    # create shell
-    builtins.__xonsh_shell__ = Shell(execer=execer, **shell_kwargs)
     ctx['__name__'] = '__main__'
     return env
+
+
+def start_services(shell_kwargs):
+    """Starts up the essential services in the proper order.
+    This returns the environment instance as a convenience.
+    """
+    g = _start_services(shell_kwargs)
+
+    while True:
+        try:
+            next(g)
+        except StopIteration as e:
+            return e.value
 
 
 def premain(argv=None):
