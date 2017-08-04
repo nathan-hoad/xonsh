@@ -26,7 +26,7 @@ def xonshd_reaper(*args):
                 break
 
 
-def xonshd_handle_client(*, start_services_coro, env, cwd, argv):
+def xonshd_handle_client(*, start_services_coro, env, cwd, argv, tty):
     import xonsh.main
 
     signal.signal(signal.SIGCHLD, signal.SIG_DFL)
@@ -40,6 +40,8 @@ def xonshd_handle_client(*, start_services_coro, env, cwd, argv):
     for key, value in os.environ.items():
         env[key] = value
 
+    env['XONSH_INTERACTIVE'] = tty
+
     # FIXME: reinitialise history, and figure out why it's not being written
 
     try:
@@ -48,8 +50,14 @@ def xonshd_handle_client(*, start_services_coro, env, cwd, argv):
     except StopIteration as e:
         pass
 
+    # FIXME: we're too late, __xonsh_shell__ will already be initialised to
+    # something non-interactive, but we'll pretend anyway. Surely to cause
+    # bugs.
     class args:
-        mode = xonsh.main.XonshMode.interactive
+        if tty:
+            mode = xonsh.main.XonshMode.interactive
+        else:
+            mode = xonsh.main.XonshMode.script_from_stdin
 
     xonsh.main.main_xonsh(args)
 
@@ -79,8 +87,47 @@ def xonshd():
             sys.exit(0)
 
 
+def _daemonise(tty):
+    if tty:
+        import pty
+        pid, *fds = pty.fork()
+    else:
+        stdin_r, stdin_w = os.pipe()
+        stdout_r, stdout_w = os.pipe()
+        stderr_r, stderr_w = os.pipe()
+
+        pid = os.fork()
+        if pid == 0:
+            os.closerange(0, 3)
+
+            # replace stdio
+            os.dup2(stdin_r, 0)
+            os.dup2(stdout_w, 1)
+            os.dup2(stderr_w, 2)
+
+            # close the source stdio
+            os.close(stdin_r)
+            os.close(stdout_w)
+            os.close(stderr_w)
+
+            # close ones we don't care about
+            os.close(stdin_w)
+            os.close(stdout_r)
+            os.close(stderr_r)
+            fds = []
+        else:
+            # close ones we don't care about
+            os.close(stdin_r)
+            os.close(stdout_w)
+            os.close(stderr_w)
+
+            # fds to ship off to the foreground
+            fds = [stdin_w, stdout_r, stderr_r]
+
+    return pid, fds
+
+
 def xonshd_server(listen):
-    import pty
     import xonsh.main
 
     builtins.__xonsh_ctx__ = {}
@@ -121,8 +168,10 @@ def xonshd_server(listen):
         log.info("argv %s", data['argv'])
         log.info("cwd %s", data['cwd'])
         log.info("env %s", data['env'])
+        log.info("tty %s", data['tty'])
 
-        pid, pty_fd = pty.fork()
+        pid, fds = _daemonise(tty=data['tty'])
+
         if pid == 0:
             exit_code = 0
 
@@ -132,6 +181,9 @@ def xonshd_server(listen):
             except SystemExit as e:
                 exit_code = e.code
             except:
+                import traceback
+                traceback.print_exc()
+
                 log.exception("Problem handling client")
                 exit_code = 1
             else:
@@ -140,9 +192,12 @@ def xonshd_server(listen):
                 client.send(bytearray([exit_code]))
                 os._exit(0)
         else:
-            sendfds(client, [pty_fd])
+            sendfds(client, fds)
             client.close()
-            os.close(pty_fd)
+
+            for fd in fds:
+                os.close(fd)
+
             continue
 
 
@@ -151,15 +206,16 @@ def xonshc(server):
         'env': dict(os.environ),
         'cwd': os.getcwd(),
         'argv': sys.argv,
+        'tty': sys.stdin.isatty(),
     })
     data_len = str(len(data)).zfill(MAX_DATA_DIGITS)
     assert len(data_len) == MAX_DATA_DIGITS
 
     server.sendall(data_len.encode('ascii'))
     server.sendall(data.encode('utf8'))
-    remote_tty = recvfds(server, 1)[0]
-
-    xonshc_main(remote_tty, server)
+    fd_count = 1 if sys.stdin.isatty() else 3
+    remote_fds = recvfds(server, fd_count)
+    xonshc_main(remote_fds, server)
 
 
 def xonshc_resize(*args, remote_tty):
@@ -173,10 +229,10 @@ def xonshc_resize(*args, remote_tty):
         fcntl.ioctl(0, termios.TIOCGWINSZ, buf, True)
         fcntl.ioctl(remote_tty, termios.TIOCSWINSZ, buf)
     except Exception:
-        pass  # FIXME: why was I doing this at work?
+        pass
 
 
-def xonshc_main(remote_tty, server):
+def xonshc_main(remote_fds, server):
     import functools
     import tty
 
@@ -185,32 +241,46 @@ def xonshc_main(remote_tty, server):
             n = os.write(fd, data)
             data = data[n:]
 
-    _resize = functools.partial(xonshc_resize, remote_tty=remote_tty)
-    signal.signal(signal.SIGWINCH, _resize)
+    if sys.stdin.isatty():
+        _resize = functools.partial(xonshc_resize, remote_tty=remote_fds[0])
+        signal.signal(signal.SIGWINCH, _resize)
 
-    try:
-        mode = tty.tcgetattr(0)
-        tty.setraw(0)
-        restore = 1
-    except tty.error:
-        restore = 0
+        try:
+            mode = tty.tcgetattr(0)
+            tty.setraw(0)
+            restore = True
+        except tty.error:
+            restore = True
 
-    _resize()
+        _resize()
+    else:
+        restore = False
+
+    proxy_map = {}
+    for i, fd in enumerate(remote_fds):
+        proxy_map[i] = fd
+        proxy_map[fd] = i
 
     try:
         while True:
-            r, *idk = select.select([0, remote_tty], [], [])
+            if not proxy_map:
+                # dodgy hack to ensure we hit the except clause
+                raise OSError()
 
-            if remote_tty in r:
-                b = os.read(remote_tty, 1024)
+            readable, *ignored = select.select(proxy_map.keys(), [], [])
+
+            for fd in readable:
+                dest = proxy_map[fd]
+
+                b = os.read(fd, 1024)
                 if not b:
-                    break
-                _write(0, b)
-            if 0 in r:
-                b = os.read(0, 1024)
-                if not b:
-                    break
-                _write(remote_tty, b)
+                    proxy_map.pop(fd)
+                    proxy_map.pop(dest)
+                    os.close(fd)
+                    os.close(dest)
+                    continue
+
+                _write(dest, b)
     except (OSError, IOError):
         if restore:
             tty.tcsetattr(0, tty.TCSAFLUSH, mode)
