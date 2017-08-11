@@ -28,10 +28,14 @@ def xonshd_reaper(*args):
 
 def xonshd_handle_client(*, start_services_coro, env, cwd, argv, tty):
     import xonsh.main
+    from xonsh.timings import setup_timings
 
     signal.signal(signal.SIGCHLD, signal.SIG_DFL)
 
     sys.argv = argv
+
+    setup_timings()
+
     os.environ.clear()
     os.environ.update(env)
     os.chdir(cwd)
